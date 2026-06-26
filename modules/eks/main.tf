@@ -37,12 +37,12 @@ resource "aws_iam_openid_connect_provider" "this" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = data.tls_certificate.this.certificates[*].sha1_fingerprint
 
-  url = aws_eks_cluster.this.identity[0].oidc_provider
+  url = "https://${replace(aws_eks_cluster.this.identity[0].issuer, "https://", "")}"
 }
 
 # Data source for OIDC provider thumbprint
 data "tls_certificate" "this" {
-  url = aws_eks_cluster.this.identity[0].oidc_provider
+  url = aws_eks_cluster.this.identity[0].issuer
 }
 
 # EKS Managed Node Group
