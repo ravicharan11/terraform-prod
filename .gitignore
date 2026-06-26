@@ -1,0 +1,50 @@
+# ==============================================================
+# Gitignore - Terraform Project
+# Excludes Terraform state files and other generated files
+# ==============================================================
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfstate.backup.*
+
+# Terraform lock file
+.terraform.lock.hcl
+
+# Terraform plugin directory
+.terraform/
+
+# Terraform plan files
+*.tfplan
+*.tfplan.*
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Environment variables
+.terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
