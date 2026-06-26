@@ -30,6 +30,10 @@ resource "aws_eks_cluster" "this" {
     Project     = var.project
     ManagedBy   = "Terraform"
   }
+    depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_iam_role_policy_attachment.eks_vpc_resource_controller
+  ]
 }
 
 # OIDC Provider for IRSA
@@ -37,12 +41,12 @@ resource "aws_iam_openid_connect_provider" "this" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = data.tls_certificate.this.certificates[*].sha1_fingerprint
 
-  url = "https://${replace(aws_eks_cluster.this.identity[0].issuer, "https://", "")}"
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
 
 # Data source for OIDC provider thumbprint
 data "tls_certificate" "this" {
-  url = aws_eks_cluster.this.identity[0].issuer
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
 
 # EKS Managed Node Group
