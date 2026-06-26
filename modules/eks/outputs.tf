@@ -25,7 +25,7 @@ output "cluster_security_group" {
 
 output "oidc_provider" {
   description = "OIDC provider ARN"
-  value       = aws_eks_cluster.this.identity[0].oidc_provider[0].arn
+  value       = aws_iam_openid_connect_provider.this.arn
 }
 
 output "cluster_iam_role_arn" {

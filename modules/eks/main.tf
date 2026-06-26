@@ -32,6 +32,19 @@ resource "aws_eks_cluster" "this" {
   }
 }
 
+# OIDC Provider for IRSA
+resource "aws_iam_openid_connect_provider" "this" {
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = data.tls_certificate.this.certificates[*].sha1_fingerprint
+
+  url = aws_eks_cluster.this.identity[0].oidc_provider
+}
+
+# Data source for OIDC provider thumbprint
+data "tls_certificate" "this" {
+  url = aws_eks_cluster.this.identity[0].oidc_provider
+}
+
 # EKS Managed Node Group
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
@@ -219,12 +232,12 @@ resource "aws_iam_role" "ebs_csi_driver_role" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_eks_cluster.this.identity[0].oidc_provider[0].arn
+          Federated = aws_iam_openid_connect_provider.this.arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${replace(aws_eks_cluster.this.identity[0].oidc_provider[0].arn, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
           }
         }
       }

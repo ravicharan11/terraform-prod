@@ -1,5 +1,5 @@
 # ==============================================================
-# Variables - EKS Module (in security-group directory)
+# Variables - EKS Module (in eks directory)
 # ==============================================================
 
 variable "region" {
