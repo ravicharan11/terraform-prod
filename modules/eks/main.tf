@@ -16,9 +16,22 @@ module "eks" {
 
   version = "~> 21.0"
 
+  # Cluster Name
+  cluster_name = "${var.project}-${var.environment}"
+
+  # Cluster Version
+  cluster_version = var.cluster_version
+
   # VPC Configuration
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
+
+  # Cluster Endpoint Configuration
+  cluster_endpoint_public_access  = true
+  cluster_endpoint_private_access = true
+
+  # OIDC Provider
+  enable_irsa = true
 
   # EKS Managed Node Group
   eks_managed_node_groups = {
