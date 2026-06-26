@@ -6,51 +6,24 @@
 # 3. 6 add-ons: coredns, kube-proxy, vpc-cni, pod-identity,
 #    ebs-csi-driver, metrics-server
 # 4. IAM role (IRSA) for the EBS CSI driver
-# Uses EKS module v21.x with Kubernetes 1.35, AL2023 AMI,
-# EKS Pod Identity, access_entries, and AWS provider v6.0+
+# Uses raw AWS resources with Kubernetes 1.35, AL2023 AMI,
+# EKS Pod Identity, and AWS provider v6.0+
 # ==============================================================
 
-# EKS Module from terraform-aws-modules/eks/aws v21.x
-module "eks" {
-  source = "terraform-aws-modules/eks/aws"
+# EKS Cluster
+resource "aws_eks_cluster" "this" {
+  name     = "${var.project}-${var.environment}"
+  role_arn = aws_iam_role.eks_cluster_role.arn
+  version  = var.cluster_version
 
-  version = "~> 21.0"
-
-  # Cluster Name
-  cluster_name = "${var.project}-${var.environment}"
-
-  # Cluster Version
-  cluster_version = var.cluster_version
-
-  # VPC Configuration
-  vpc_id     = var.vpc_id
-  subnet_ids = var.private_subnet_ids
-
-  # Cluster Endpoint Configuration
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-
-  # OIDC Provider
-  enable_irsa = true
-
-  # EKS Managed Node Group
-  eks_managed_node_groups = {
-    default_node_group = {
-      name           = "${var.project}-${var.environment}-node-group"
-      instance_types = [var.instance_type]
-
-      # Node Group Configuration
-      min_size     = 3
-      max_size     = 3
-      desired_size = 3
-
-      # AMI Configuration
-      ami_type       = "AL2023_x86_64_STANDARD"
-      capacity_type  = "ON_DEMAND"
-    }
+  vpc_config {
+    subnet_ids              = var.private_subnet_ids
+    endpoint_public_access  = true
+    endpoint_private_access = true
   }
 
-  # Cluster Tags
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
   tags = {
     Name        = "${var.project}-${var.environment}-eks"
     Environment = var.environment
@@ -59,60 +32,97 @@ module "eks" {
   }
 }
 
+# EKS Managed Node Group
+resource "aws_eks_node_group" "this" {
+  cluster_name    = aws_eks_cluster.this.name
+  node_group_name = "${var.project}-${var.environment}-node-group"
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = var.private_subnet_ids
+
+  scaling_config {
+    desired_size = 3
+    max_size     = 3
+    min_size     = 3
+  }
+
+  instance_types = [var.instance_type]
+
+  ami_type       = "AL2023_x86_64_STANDARD"
+  capacity_type  = "ON_DEMAND"
+
+  labels = {
+    Environment = var.environment
+    Project     = var.project
+  }
+
+  tags = {
+    Name        = "${var.project}-${var.environment}-node"
+    Environment = var.environment
+    Project     = var.project
+    ManagedBy   = "Terraform"
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.ec2_container_registry_readonly,
+  ]
+}
+
 # EKS Add-ons (managed separately)
 resource "aws_eks_addon" "coredns" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "coredns"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 resource "aws_eks_addon" "kube_proxy" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "kube-proxy"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 resource "aws_eks_addon" "vpc_cni" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "vpc-cni"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 resource "aws_eks_addon" "pod_identity_agent" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "eks-pod-identity-agent"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "aws-ebs-csi-driver"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
   service_account_role_arn  = aws_iam_role.ebs_csi_driver_role.arn
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 resource "aws_eks_addon" "metrics_server" {
-  cluster_name             = module.eks.cluster_name
+  cluster_name             = aws_eks_cluster.this.name
   addon_name                = "metrics-server"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [module.eks]
+  depends_on = [aws_eks_node_group.this]
 }
 
 # ==============================================================
@@ -209,12 +219,12 @@ resource "aws_iam_role" "ebs_csi_driver_role" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = module.eks.oidc_provider_arn
+          Federated = aws_eks_cluster.this.identity[0].oidc_provider[0].arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${replace(module.eks.oidc_provider_arn, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(aws_eks_cluster.this.identity[0].oidc_provider[0].arn, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
           }
         }
       }
