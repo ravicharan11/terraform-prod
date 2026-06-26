@@ -16,29 +16,9 @@ module "eks" {
 
   version = "~> 21.0"
 
-  # Cluster Name
-  cluster_name    = "${var.project}-${var.environment}"
-  cluster_version = var.cluster_version
-
   # VPC Configuration
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
-
-  # Cluster Endpoint Configuration
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-
-  # Cluster IAM Role
-  iam_role_arn = aws_iam_role.eks_cluster_role.arn
-
-  # OIDC Provider
-  enable_irsa = true
-
-  # EKS Pod Identity
-  enable_pod_identity_association = true
-
-  # Cluster Add-ons
-  create_cluster_security_group = false
 
   # EKS Managed Node Group
   eks_managed_node_groups = {
@@ -51,31 +31,11 @@ module "eks" {
       max_size     = 3
       desired_size = 3
 
-      # Node IAM Role
-      iam_role_arn = aws_iam_role.eks_node_role.arn
-
       # AMI Configuration
       ami_type       = "AL2023_x86_64_STANDARD"
       capacity_type  = "ON_DEMAND"
-
-      # Node Group Labels
-      labels = {
-        Environment = var.environment
-        Project     = var.project
-      }
-
-      # Node Group Tags
-      tags = {
-        Name        = "${var.project}-${var.environment}-node"
-        Environment = var.environment
-        Project     = var.project
-        ManagedBy   = "Terraform"
-      }
     }
   }
-
-  # Access Entries for EKS Pod Identity
-  enable_cluster_creator_admin_permissions = true
 
   # Cluster Tags
   tags = {
