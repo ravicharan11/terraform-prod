@@ -35,30 +35,10 @@ module "eks" {
   enable_irsa = true
 
   # EKS Pod Identity
-  enable_pod_identity = true
+  enable_pod_identity_association = true
 
   # Cluster Add-ons
-  cluster_addons = {
-    coredns = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
-    eks-pod-identity-agent = {
-      most_recent = true
-    }
-    aws-ebs-csi-driver = {
-      most_recent              = true
-      service_account_role_arn = aws_iam_role.ebs_csi_driver_role.arn
-    }
-    metrics-server = {
-      most_recent = true
-    }
-  }
+  create_cluster_security_group = false
 
   # EKS Managed Node Group
   eks_managed_node_groups = {
@@ -95,20 +75,7 @@ module "eks" {
   }
 
   # Access Entries for EKS Pod Identity
-  access_entries = {
-    # Admin access for cluster creator
-    admin_access = {
-      principal_arn = data.aws_caller_identity.current.arn
-      policy_associations = {
-        admin = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
-  }
+  enable_cluster_creator_admin_permissions = true
 
   # Cluster Tags
   tags = {
@@ -117,6 +84,62 @@ module "eks" {
     Project     = var.project
     ManagedBy   = "Terraform"
   }
+}
+
+# EKS Add-ons (managed separately)
+resource "aws_eks_addon" "coredns" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "coredns"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.eks]
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "kube-proxy"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.eks]
+}
+
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "vpc-cni"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.eks]
+}
+
+resource "aws_eks_addon" "pod_identity_agent" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "eks-pod-identity-agent"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.eks]
+}
+
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "aws-ebs-csi-driver"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  service_account_role_arn  = aws_iam_role.ebs_csi_driver_role.arn
+
+  depends_on = [module.eks]
+}
+
+resource "aws_eks_addon" "metrics_server" {
+  cluster_name             = module.eks.cluster_name
+  addon_name                = "metrics-server"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.eks]
 }
 
 # ==============================================================
@@ -218,7 +241,7 @@ resource "aws_iam_role" "ebs_csi_driver_role" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "${replace(module.eks.oidc_provider, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(module.eks.oidc_provider_arn, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
           }
         }
       }

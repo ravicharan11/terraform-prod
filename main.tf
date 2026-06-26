@@ -53,7 +53,4 @@ module "argocd" {
   # Tags
   environment = local.environment
   project     = var.project
-
-  # Ensure EKS cluster exists before installing ArgoCD
-  depends_on = [module.eks]
 }
